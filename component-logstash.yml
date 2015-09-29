@@ -1,0 +1,186 @@
+#
+application:
+    configuration:
+       configuration.image: { ami: "us-east-1/ami-bf5021d6", user: "root" }
+       configuration.recipeUrl: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/loky9000/svb-murano-logstash-cookbooks.tar.gz"
+    interfaces:
+        configuration:
+            "*": bind(logstash#input.*)
+        logger:
+            logger-servers:     bind(logstash#result.logstash-hosts)
+            kibana-dashboard:  bind(logstash#result.kibana-dashboard)
+            "*": bind(logstash#actions.*)
+
+    components:
+        logstash:
+            type: workflow.Instance
+            interfaces:
+                input:
+                    image:
+                      type: configuration(map<string, string>)
+                      name: Compatible AMI
+                      suggestions:
+                        "RHEL 6 (us-east": { ami: "us-east-1/ami-bf5021d6", user: "root" }
+                    recipeUrl: configuration(string)
+                actions:
+                    update: receive-command()
+                    install-consumer: receive-command(list<string> target-hosts, string identity, list<string> log_target => string kibana-dashboard-url )
+                result:
+                    redis-url: publish-signal(string)
+                    logstash-hosts:    publish-signal(list<string>)
+                    kibana-dashboard: publish-signal(string)
+            configuration:
+                configuration.triggers:
+                  input.recipeUrl:       update
+                configuration.propagateStatus:  
+                  - update
+                configuration.workflows:
+                    launch: &update
+                        steps:
+                            - init-indexer:
+                                action: provisionVms
+                                parameters:
+                                    hardwareId: "m1.small"
+                                    roleName: indexer
+                                    vmIdentity: "{$.image.user}"
+                                    imageId: "{$.image.ami}"
+                                output:
+                                  indexerips: ips
+                                  privateips: privateips
+                            - install-redis:
+                                action: chefrun
+                                precedingPhases: [ init-indexer ]
+                                parameters:
+                                    version: "11.16.4-1"
+                                    isSolo: true
+                                    roles: [ indexer ]
+                                    recipeUrl: "{$.recipeUrl}"
+                                    runList: [ "recipe[qubell_logstash::redis]"]
+                                    jattrs:
+                                      redisio:
+                                        servers:
+                                          -  { port: 6379, address: "{$.privateips[0]}"}
+                                output:
+                                  chefAttrs: chefState
+                            - install-kibana:
+                                action: chefrun
+                                precedingPhases: [ install-redis]
+                                parameters:
+                                    isSolo: true
+                                    roles: [ indexer ]
+                                    recipeUrl: "{$.recipeUrl}"
+                                    runList: [ "recipe[qubell_logstash::kibana]" ]
+                                    jattrs:
+                                      elasticsearch:
+                                        address: "{$.privateips[0]}"
+                            - start-indexer:
+                                action: .install-logger
+                                precedingPhases: [ install-kibana ]
+                                parameters:
+                                  redis_url: "{$.chefAttrs['*'][0].qubell_logstash.redis_url}" 
+                                  target-hosts: "{$.indexerips}"
+                                  identity: "{$.image.user}"
+                                  vm-user: "{$.image.user}"
+                                  vm-group: "{$.image.user}"
+                                  roles: "indexer"
+                                  logstash_role: "indexer"
+                                  log_target: ["/var/log/*.log:syslogpath", "/var/log/messages:syslogpath", "/var/log/syslog:syslogpath"]
+                                output:
+                                  kibana-dashboard-url: kibana-dashboard-url
+                        return:
+                            redis-url:
+                                value: "redis://{$.chefAttrs['*'][0].redisio.servers[0].address}:{$.chefAttrs['*'][0].redisio.servers[0].port}" 
+                            logstash-hosts:
+                                description: Logstash host
+                                value: "{$.indexerips}"
+                            kibana-dashboard:
+                                description: Kibana UI
+                                value: "http://{$.indexerips[0]}/kibana/"
+
+                    update: *update
+                                  
+                    install-consumer:
+                      parameters:
+                         log_target:
+                            description: Map of log path's => log type
+                         target-hosts:
+                            description: Consumer hosts
+                         identity:
+                            description: Consumer hosts identity
+                      steps:
+                        - start-consumer:
+                                action: .install-logger
+                                parameters:
+                                  target-hosts: "{$.target-hosts}"
+                                  identity: "{$.identity}"
+                                  redis_url: "{$.redis-url}"
+                                  vm-user: "{$.identity}"
+                                  vm-group: "{$.identity}"
+                                  roles: "consumer"
+                                  logstash_role: "consumer"
+                                  log_target: "{$.log_target}"
+                                output:
+                                  kibana-dashboard-url: kibana-dashboard-url
+                            
+                      return:
+                          kibana-dashboard-url:
+                             value: "{$.kibana-dashboard-url}"
+
+                    .install-logger:
+                        parameters:
+                            redis_url:
+                              description: Redis url
+                            log_target:
+                              description: Map of log path's => log type
+                            target-hosts:
+                              description: Consumer hosts
+                            identity:
+                              description: Consumer hosts identity
+                            roles: 
+                              description: target roles
+                            logstash_role:
+                              description: logstash role
+                            vm-user: {type: string}
+                            vm-group: {type: string}
+                        steps:
+                            - provision-consumer:
+                                action: provisionVms
+                                parameters:
+                                  roleName:  "{$.roles}" 
+                                  hardwareId: ""
+                                  vmIdentity: "{$.identity}"
+                                  retryCount: 0
+                                  staticIps: "{$.target-hosts}"
+                            - install-logger:
+                                action: chefrun
+                                precedingPhases: [ provision-consumer ]
+                                parameters:
+                                    isSolo: true
+                                    isSudo: false
+                                    roles: [ "{$.roles}" ]
+                                    recipeUrl: "{$.recipeUrl}"
+                                    runList: [ "recipe[qubell_logstash]" ]
+                                    jattrs:
+                                        java:
+                                          windows:
+                                            url: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/deps/jdk-7u71-windows-x64.exe"
+                                            package_name: "Java SE Development Kit 7 Update 71 (64-bit)"
+                                        qubell_logstash:
+                                            redis_url: "{$.redis_url}"
+                                            role: "{$.logstash_role}"
+                                            user: "{$.vm-user}"
+                                            group: "{$.vm-group}"
+                                            log_target: "{$.log_target}"
+                                output:
+                                  chefAttrs1: chefState
+                      
+                        return:
+                          kibana-dashboard-url:
+                             value: "{$.kibana-dashboard}#/dashboard/file/logstash.json/?query=host:%5C%22{$.chefAttrs1['*'][0].qubell_logstash.tag}%5C%22"
+
+                    destroy:
+                        steps:
+                            - destroy-vm:
+                                action: undeployEnv
+                                parameters:
+                                    phase: destroy

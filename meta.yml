@@ -1,0 +1,15 @@
+kit:
+  name: "Apache Maven"
+  link: https://github.com/qubell-bazaar/component-tomcat-dev
+  applications:
+    - name: "Build server"
+      manifest: https://raw.github.com/qubell-bazaar/component-maven/1.0-37p/component-maven.yml
+  provider:
+    name: "Qubell"
+    link: http://qubell.com
+  documentation:
+    overview: |
+      This application requires the following items to be configured in your environment:
+        * CloudServers account;
+        * Ports 8080 open on the ﬁrewall.
+      Please refer to the Getting Started for step-by-step instructions on how to configure your environment.
