@@ -1,9 +1,9 @@
 kit:
-  name: "Apache Maven"
-  link: https://github.com/qubell-bazaar/component-tomcat-dev
+  name: "Logstash"
+  link: https://github.com/qubell-bazaar/component-logstash
   applications:
-    - name: "Build server"
-      manifest: https://raw.github.com/qubell-bazaar/component-maven/1.0-37p/component-maven.yml
+    - name: "Logstash"
+      manifest: https://raw.github.com/qubell-bazaar/component-logstash/1.0-43p/component-logstash.yml
   provider:
     name: "Qubell"
     link: http://qubell.com
