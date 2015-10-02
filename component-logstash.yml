@@ -2,7 +2,7 @@
 application:
     configuration:
        configuration.image: { ami: "us-east-1/ami-bf5021d6", user: "root" }
-       configuration.recipeUrl: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/qubell-bazaar/component-logstash-cookbooks-stable-2d921bd.tar.gz"
+       configuration.recipeUrl: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/qubell-bazaar/component-logstash-cookbooks-stable-759a913.tar.gz"
     interfaces:
         configuration:
             "*": bind(logstash#input.*)
