@@ -26,8 +26,8 @@ Configurations
 Consumer example
 ---------------
 
-### For the first launch Logstash indexer and add it as [service](http://docs.qubell.com/actions/services/contents.html) to your [environment](http://docs.qubell.com/concepts/environments.html) 
-### After that add consumers via [ServiceCall](http://docs.qubell.com/actions/services/serviceCall.html) to Logstash service
+### For the first launch Logstash indexer and add it as [service](http://docs.tonomi.com/actions/services/contents.html) to your [environment](http://docs.tonomi.com/concepts/environments.html) 
+### After that add consumers via [ServiceCall](http://docs.tonomi.com/actions/services/serviceCall.html) to Logstash service
 ### Add consumer on apache host
 
     workflow:
